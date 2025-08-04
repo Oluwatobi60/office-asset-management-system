@@ -1,0 +1,68 @@
+<?php
+require_once dirname(__FILE__) . "/../include/config.php";
+
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+header('Content-Type: application/json');
+
+// Check database connection
+if (!$conn || $conn->connect_error) {
+    error_log("Database connection failed: " . ($conn ? $conn->connect_error : "No connection"));
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Database connection failed'
+    ]);
+    exit;
+}
+
+if (!isset($_GET['department-select'])) {
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Department not specified'
+    ]);
+    exit;
+}
+
+try {
+    $department = trim($_GET['department-select']);
+    
+    // Log the incoming request
+    error_log("Fetching employees for department: " . $department);
+
+    // Prepare SQL to get employee details with exact department match and non-null names
+    $sql = "SELECT firstname, lastname, department 
+            FROM user_table 
+            WHERE department = ? AND firstname IS NOT NULL AND lastname IS NOT NULL
+            ORDER BY firstname, lastname";
+      $stmt = $conn->prepare($sql);
+    $stmt->bind_param("s", $department);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    $employees = [];
+    while ($row = $result->fetch_assoc()) {
+        $employees[] = [
+            'name' => trim($row['firstname'] . ' ' . $row['lastname']),
+            'department' => $row['department']
+        ];
+    }
+    
+    // Log the results    error_log("Found " . count($employees) . " employees for department: " . $department);
+    
+    echo json_encode([
+        'status' => 'success',
+        'data' => $employees
+    ]);
+} catch (Exception $e) {
+    error_log("Error in get_employees.php: " . $e->getMessage());
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Failed to fetch employees'
+    ]);
+}
+
+if (isset($stmt)) {
+    $stmt->close();
+}
+$conn->close();
+?>

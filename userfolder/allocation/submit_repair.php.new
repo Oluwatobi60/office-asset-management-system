@@ -1,0 +1,249 @@
+<?php
+// Load database configuration and utilities
+require_once '../../include/config.php';
+require_once '../../include/utils.php';
+
+// Enable error reporting but log them instead of displaying
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', dirname(dirname(dirname(__FILE__))) . '/error_log.txt');
+
+// Ensure clean output by resetting buffer
+if (ob_get_level()) ob_end_clean();
+ob_start();
+
+// Function to log errors with context
+function logError($message, $context = []) {
+    $logFile = dirname(dirname(dirname(__FILE__))) . '/error_log.txt';
+    $timestamp = date('[Y-m-d H:i:s]');
+    
+    $contextStr = '';
+    if (!empty($context)) {
+        $safeContext = array_map(function($value) {
+            return is_string($value) ? $value : json_encode($value);
+        }, $context);
+        $contextStr = ' | Context: ' . json_encode($safeContext);
+    }
+    
+    $logMessage = "{$timestamp} Error in submit_repair.php: {$message}{$contextStr}\n";
+    error_log($logMessage, 3, $logFile);
+}
+
+// Function to send JSON response with better error handling
+function sendJsonResponse($success, $message, $data = null) {
+    try {
+        // Clear any buffered output
+        if (ob_get_level()) ob_end_clean();
+        
+        // Set proper JSON headers
+        header_remove(); // Clear any existing headers
+        http_response_code($success ? 200 : 400);
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Cache-Control: post-check=0, pre-check=0', false);
+        header('Pragma: no-cache');
+        
+        // Create response array
+        $response = [
+            'success' => $success,
+            'message' => $message
+        ];
+        
+        if ($data !== null) {
+            $response['data'] = $data;
+        }
+        
+        // Encode with all error prevention flags
+        $json = json_encode(
+            $response,
+            JSON_UNESCAPED_UNICODE | 
+            JSON_UNESCAPED_SLASHES | 
+            JSON_PARTIAL_OUTPUT_ON_ERROR |
+            JSON_INVALID_UTF8_IGNORE
+        );
+        
+        if ($json === false) {
+            throw new Exception(json_last_error_msg());
+        }
+        
+        echo $json;
+        
+    } catch (Exception $e) {
+        logError("JSON encode error", [
+            'error' => $e->getMessage(),
+            'data' => $response ?? null
+        ]);
+        
+        // Send a safe fallback response
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Server error: Failed to encode response'
+        ]);
+    } finally {
+        exit;
+    }
+}
+
+try {
+    // Start session if not already started
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    // Check if user is logged in
+    if (!isset($_SESSION['username'])) {
+        sendJsonResponse(false, 'User not authenticated');
+    }
+
+    // Get raw POST data
+    $raw_data = file_get_contents('php://input');
+    if ($raw_data === false) {
+        throw new Exception('Failed to read request data');
+    }
+
+    // Log request details for debugging
+    logError('Received repair request', [
+        'headers' => getallheaders(),
+        'raw_data' => $raw_data
+    ]);
+
+    // Parse and validate JSON data
+    $data = json_decode($raw_data, true);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        throw new Exception('Invalid JSON data: ' . json_last_error_msg());
+    }
+
+    // Validate required fields
+    if (empty($data['asset_id']) || !is_numeric($data['asset_id'])) {
+        throw new Exception('Invalid or missing asset_id');
+    }
+    if (empty($data['asset_info']) || !is_array($data['asset_info'])) {
+        throw new Exception('Invalid or missing asset info');
+    }
+
+    // Extract and validate asset info
+    $asset_id = (int)$data['asset_id'];
+    $asset_info = $data['asset_info'];
+    
+    // Validate required asset info fields
+    foreach (['reg_no', 'asset_name', 'department'] as $field) {
+        if (empty($asset_info[$field])) {
+            throw new Exception("Missing required field: {$field}");
+        }
+    }
+
+    // Check and create database structure if needed
+    try {
+        // Ensure status column exists in staff_table
+        $conn->query("SELECT status FROM staff_table LIMIT 1");
+    } catch (PDOException $e) {
+        $conn->exec("ALTER TABLE staff_table ADD COLUMN status VARCHAR(50) DEFAULT NULL");
+    }
+
+    // Create repair_asset table if it doesn't exist
+    try {
+        $conn->query("SELECT 1 FROM repair_asset LIMIT 1");
+    } catch (PDOException $e) {
+        $create_table = "CREATE TABLE repair_asset (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            asset_id INT NOT NULL,
+            reg_no VARCHAR(100) NOT NULL,
+            asset_name VARCHAR(255) NOT NULL,
+            department VARCHAR(100) NOT NULL,
+            reported_by VARCHAR(100) NOT NULL,
+            description TEXT,
+            category VARCHAR(50) DEFAULT 'General',
+            quantity INT DEFAULT 1,
+            report_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            status VARCHAR(50) DEFAULT 'Under Repair',
+            FOREIGN KEY (asset_id) REFERENCES staff_table(id) ON DELETE CASCADE,
+            INDEX idx_asset_id (asset_id),
+            INDEX idx_reg_no (reg_no),
+            INDEX idx_status (status),
+            UNIQUE INDEX idx_unique_repair (asset_id, status)
+        )";
+        $conn->exec($create_table);
+    }
+
+    // Start transaction
+    if (!$conn->beginTransaction()) {
+        throw new Exception("Could not begin transaction");
+    }
+
+    try {
+        // Check asset status
+        $check_stmt = $conn->prepare("SELECT id, status FROM staff_table WHERE id = ?");
+        $check_stmt->execute([$asset_id]);
+        $asset_data = $check_stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$asset_data) {
+            throw new Exception("Asset not found");
+        }
+        if ($asset_data['status'] === 'Under Repair') {
+            throw new Exception("Asset is already marked for repair");
+        }
+
+        // Insert repair record
+        $insert_stmt = $conn->prepare("
+            INSERT INTO repair_asset (
+                asset_id, reg_no, asset_name, department, reported_by,
+                description, category, quantity, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Under Repair')
+        ");
+
+        $insert_stmt->execute([
+            $asset_id,
+            $asset_info['reg_no'],
+            $asset_info['asset_name'],
+            $asset_info['department'],
+            $_SESSION['username'],
+            $asset_info['description'] ?? 'Marked for repair',
+            $asset_info['category'] ?? 'General',
+            (int)($asset_info['quantity'] ?? 1)
+        ]);
+
+        // Update asset status
+        $update_stmt = $conn->prepare("UPDATE staff_table SET status = 'Under Repair' WHERE id = ?");
+        $update_stmt->execute([$asset_id]);
+
+        // Commit transaction
+        $conn->commit();
+
+        sendJsonResponse(true, 'Asset has been marked for repair', ['asset_id' => $asset_id]);
+
+    } catch (Exception $e) {
+        if ($conn->inTransaction()) {
+            $conn->rollBack();
+        }
+        throw $e;
+    }
+
+} catch (PDOException $e) {
+    logError("Database error", [
+        'message' => $e->getMessage(),
+        'code' => $e->getCode(),
+        'trace' => $e->getTraceAsString()
+    ]);
+    
+    // Rollback if still in transaction
+    if ($conn && $conn->inTransaction()) {
+        $conn->rollBack();
+    }
+    
+    if (strpos($e->getMessage(), 'Duplicate entry') !== false) {
+        sendJsonResponse(false, 'This asset is already marked for repair');
+    } else {
+        sendJsonResponse(false, 'Database error: ' . $e->getMessage());
+    }
+
+} catch (Exception $e) {
+    logError("General error", [
+        'message' => $e->getMessage(),
+        'trace' => $e->getTraceAsString()
+    ]);
+    
+    sendJsonResponse(false, $e->getMessage());
+}
+?>

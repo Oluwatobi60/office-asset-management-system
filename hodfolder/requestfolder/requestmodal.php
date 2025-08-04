@@ -1,0 +1,447 @@
+<?php
+require "../admindashboard/include/config.php"; // Include the database configuration file
+
+// Handle AJAX request for asset suggestions and details
+if (isset($_GET['q'])) {
+    $searchTerm = $_GET['q'];
+    error_log("Search Term Received: $searchTerm"); // Debugging: Log the search term
+    try {
+        $sql = "SELECT asset_name, reg_no, category, description, quantity FROM asset_table WHERE asset_name LIKE :search LIMIT 10";
+        $stmt = $conn->prepare($sql);
+        $searchTerm = "%$searchTerm%";
+        $stmt->bindValue(':search', $searchTerm, PDO::PARAM_STR);
+        $stmt->execute();
+        $assets = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        error_log("Assets Found: " . json_encode($assets)); // Debugging: Log the assets found
+        echo json_encode($assets); // Return results as JSON
+    } catch (PDOException $e) {
+        error_log("Error in asset search: " . $e->getMessage());
+        echo json_encode(['error' => 'Failed to search assets']);
+    }
+    exit;
+}
+
+
+// Handle form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit-request'])) {
+    try {
+        // Get form data with proper type casting
+        $assetName = isset($_POST['asset-name']) ? trim($_POST['asset-name']) : '';
+        $regNo = isset($_POST['reg-no']) ? trim($_POST['reg-no']) : '';
+        $description = isset($_POST['description']) ? trim($_POST['description']) : '';
+        $qty = isset($_POST['qty']) ? intval($_POST['qty']) : 0;
+        $category = isset($_POST['category']) ? trim($_POST['category']) : '';
+        $requestedBy = isset($_SESSION['username']) ? $_SESSION['username'] : '';
+        $date = isset($_POST['dates']) ? trim($_POST['dates']) : '';
+
+        // Fetch department and assigned employee based on the logged-in user
+        $department = '';
+        $assignedEmployee = '';
+        if (!empty($requestedBy)) {
+            $userSql = "SELECT department, CONCAT(firstname, ' ', lastname) AS full_name FROM user_table WHERE username = :username";
+            $userStmt = $conn->prepare($userSql);
+            $userStmt->bindValue(':username', $requestedBy, PDO::PARAM_STR);
+            $userStmt->execute();
+            $userRow = $userStmt->fetch(PDO::FETCH_ASSOC);
+            if ($userRow) {
+                $department = $userRow['department'];
+                $assignedEmployee = $userRow['full_name'];
+            }
+        }
+
+        // Validate required fields
+        if (empty($assetName) || empty($qty) || empty($date)) {
+            throw new Exception('Please fill in all required fields.');
+        }
+        
+        if (empty($requestedBy)) {
+            throw new Exception('Requesting user is not set in the session.');
+        }
+
+        // Begin transaction
+        $conn->beginTransaction();
+
+        try {
+            // Check asset availability
+            $checkQuantitySql = "SELECT quantity FROM asset_table WHERE asset_name = :asset_name";
+            $checkStmt = $conn->prepare($checkQuantitySql);
+            $checkStmt->bindValue(':asset_name', $assetName, PDO::PARAM_STR);
+            $checkStmt->execute();
+            $row = $checkStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$row) {
+                throw new Exception('Asset not found.');
+            }
+
+            $availableQuantity = $row['quantity'];
+            if ($availableQuantity <= 0) {
+                throw new Exception('Asset is not available.');
+            }
+            
+            if ($qty > $availableQuantity) {
+                throw new Exception("Asset quantity limit reached. Available quantity: $availableQuantity");
+            }
+
+            // Insert request
+            $insertSql = "INSERT INTO request_table (reg_no, asset_name, description, quantity, category, department, assigned_employee, requested_by, request_date) 
+                         VALUES (:reg_no, :asset_name, :description, :quantity, :category, :department, :assigned_employee, :requested_by, :request_date)";
+            $stmt = $conn->prepare($insertSql);
+            
+            $stmt->bindValue(':reg_no', $regNo, PDO::PARAM_STR);
+            $stmt->bindValue(':asset_name', $assetName, PDO::PARAM_STR);
+            $stmt->bindValue(':description', $description, PDO::PARAM_STR);
+            $stmt->bindValue(':quantity', $qty, PDO::PARAM_INT);
+            $stmt->bindValue(':category', $category, PDO::PARAM_STR);
+            $stmt->bindValue(':department', $department, PDO::PARAM_STR);
+            $stmt->bindValue(':assigned_employee', $assignedEmployee, PDO::PARAM_STR);
+            $stmt->bindValue(':requested_by', $requestedBy, PDO::PARAM_STR);
+            $stmt->bindValue(':request_date', $date, PDO::PARAM_STR);
+            
+            $stmt->execute();
+
+            // Update asset quantity
+            $updateAssetSql = "UPDATE asset_table SET quantity = quantity - :qty WHERE asset_name = :asset_name";
+            $updateStmt = $conn->prepare($updateAssetSql);
+            $updateStmt->bindValue(':qty', $qty, PDO::PARAM_INT);
+            $updateStmt->bindValue(':asset_name', $assetName, PDO::PARAM_STR);
+            $updateStmt->execute();
+
+            // Commit transaction
+            $conn->commit();
+            echo "<script>alert('Request submitted successfully and asset quantity updated!');</script>";
+
+        } catch (Exception $e) {
+            $conn->rollBack();
+            echo "<script>alert(" . json_encode($e->getMessage()) . ");</script>";
+            error_log("Error in request: " . $e->getMessage());
+        }
+    } catch (PDOException $e) {
+        error_log("Database error: " . $e->getMessage());
+        echo "<script>alert('An error occurred while processing your request.');</script>";
+    }
+}
+?>
+
+<style>
+    #asset-suggestions {
+        position: absolute;
+        width: 100%;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 1050;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    
+    #asset-suggestions .list-group-item {
+        cursor: pointer;
+    }
+    
+    #asset-suggestions .list-group-item:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .form-group {
+        position: relative;
+    }
+</style>
+
+<div class="row"><!-- Begin of row for modal -->
+    <!-- Column -->
+    <div class="col-md-12 col-lg-6 col-xlg-6"> 
+        <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal" data-whatever="@mdo">Request for Asset</button> <!-- Button to open the modal -->
+        <div class="modal fade" id="exampleModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true"> <!-- Modal structure -->
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="exampleModalLabel">Asset Information</h5> <!-- Modal title -->
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"> <!-- Close button -->
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <ul class="nav nav-tabs" id="myTab" role="tablist"> <!-- Tab navigation -->
+                            <li class="nav-item">
+                                <a class="nav-link active" id="basic-info-tab" data-toggle="tab" href="#basic-info" role="tab" aria-controls="basic-info" aria-selected="true">Basic Info</a> <!-- Tab for basic info -->
+                            </li>
+                        </ul>
+                        <div class="tab-content" id="myTabContent"> <!-- Tab content -->
+                            <div class="tab-pane fade show active" id="basic-info" role="tabpanel" aria-labelledby="basic-info-tab">
+                                <form action="" method="POST"> <!-- Form for submitting asset request -->
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-group">                                                <label for="asset-name" class="col-form-label">Asset Name:</label> <!-- Label for asset name -->
+                                                <input type="text" id="asset-name" class="form-control" name="asset-name" placeholder="Type to search assets" autocomplete="off" required> <!-- Input for asset name -->
+                                                <ul id="asset-suggestions" class="list-group" style="display: none;"></ul> <!-- Suggestions dropdown -->
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-md-6">
+                                            <div class="form-group">
+                                                <label for="description" class="col-form-label">Description:</label> <!-- Label for description -->
+                                                <textarea class="form-control" id="description" name="description" readonly></textarea> <!-- Textarea for description -->
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">                                            <div class="form-group">
+                                                <label for="unit" class="col-form-label">Asset Quantity:</label> <!-- Label for quantity -->
+                                                <input type="number" class="form-control" id="unit" name="qty" min="1" required disabled placeholder="Select an asset first"> <!-- Input for quantity -->
+                                            </div>
+                                        </div>
+                                       
+                                        <div class="col-md-6">
+                                            <div class="form-group">
+                                                <label for="category" class="col-form-label">Category:</label> <!-- Label for category -->
+                                                <input type="text" class="form-control" id="category" name="category" readonly> <!-- Input for category (readonly) -->
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6" style="display: none;"> <!-- Hide the department field -->
+                                            <div class="form-group">
+                                                <label for="department" class="col-form-label">Department:</label>
+                                                <select id="department" class="form-control" name="department">
+                                                    <option selected disabled>Select Department</option>
+                                                    <?php
+                                                    $sql = "SELECT * FROM department_table"; // Query to fetch departments
+                                                    $result = $conn->query($sql); // Execute the query
+                                                    if($result->num_rows > 0){ // Check if there are results
+                                                        while($row = $result->fetch_assoc()){ // Loop through the results
+                                                            echo "<option value='".$row['department']."'>".$row['department']."</option>"; // Populate the dropdown
+                                                        }
+                                                    }
+                                                    ?>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6" style="display: none;"> <!-- Hide the assigned employee field -->
+                                            <div class="form-group">
+                                                <label for="employee" class="col-form-label">Assigned Employee:</label>
+                                                <select id="employee" class="form-control" name="employee">
+                                                    <option selected disabled>Select Employee</option>
+                                                    <?php
+                                                    $sql_user = "SELECT * FROM user_table"; // Query to fetch users
+                                                    $result_user = $conn->query($sql_user); // Execute the query
+                                                    if($result_user->num_rows > 0){ // Check if there are results
+                                                        while($row = $result_user->fetch_assoc()){ // Loop through the results
+                                                            echo "<option value='".$row['firstname']." ".$row['lastname']."'>".$row['firstname']." ".$row['lastname']."</option>"; // Populate the dropdown
+                                                        }
+                                                    }
+                                                    ?>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <div class="form-group">
+                                                <label for="reg-no" class="col-form-label">Registration Number:</label> <!-- Label for registration number -->
+                                                <input type="text" class="form-control" id="reg-no" name="reg-no" readonly> <!-- Input for registration number (readonly) -->
+                                            </div>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <div class="form-group">
+                                                <label for="dates" class="col-form-label">Request Date:</label> <!-- Label for date -->
+                                                <input type="date" class="form-control" id="dates" name="dates"> <!-- Input for date -->
+                                            </div>
+                                        </div>
+                                        <div class="col-md-12">
+                                            <button type="submit" class="btn btn-primary" name="submit-request">Submit Request</button> <!-- Submit button -->
+                                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button> 
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                   
+                </div>
+            </div>
+        </div>
+    </div><!-- End of column -->
+</div><!-- End of row for modal -->
+
+<script>
+    // Get references to DOM elements that we'll be working with
+    const assetNameInput = document.getElementById('asset-name');        // Input field for asset name search
+    const suggestionsList = document.getElementById('asset-suggestions'); // Dropdown list for search suggestions
+    const quantityInput = document.getElementById('unit');               // Input field for quantity
+    const submitButton = document.querySelector('button[name="submit-request"]'); // Submit button for the form
+    let availableQuantity = 0;  // Track the currently selected asset's available quantity    // Initially disable the quantity input and submit button until an asset is selected
+    quantityInput.disabled = true;     // Prevent quantity input until asset is selected
+    submitButton.disabled = true;      // Prevent form submission until valid quantity is entered
+
+    /**
+     * Reset all form fields to their default state
+     * This is called when the asset search input changes or when clearing the form
+     */
+    function resetFormFields() {
+        document.getElementById('reg-no').value = '';          // Clear registration number field
+        document.getElementById('category').value = '';        // Clear category field
+        document.getElementById('description').value = '';     // Clear description field
+        quantityInput.value = '';                             // Clear quantity input
+        quantityInput.disabled = true;                        // Disable quantity input
+        submitButton.disabled = true;                         // Disable submit button
+        quantityInput.placeholder = 'Select an asset first';  // Set helpful placeholder text
+    }
+
+    // Function to update form fields with asset data
+    function updateFormFields(asset) {
+        document.getElementById('reg-no').value = asset.reg_no || '';
+        document.getElementById('category').value = asset.category || '';
+        document.getElementById('description').value = asset.description || '';
+        
+        const assetQuantity = parseInt(asset.quantity) || 0;
+        availableQuantity = assetQuantity;
+        
+        // Update quantity input
+        quantityInput.value = '';
+        quantityInput.disabled = assetQuantity <= 0;
+        quantityInput.min = 1;
+        quantityInput.max = assetQuantity;
+        
+        if (assetQuantity <= 0) {
+            quantityInput.placeholder = 'Asset out of stock';
+            submitButton.disabled = true;
+            alert('This asset is currently out of stock!');
+        } else {
+            quantityInput.placeholder = `Enter quantity (max: ${assetQuantity})`;
+            quantityInput.disabled = false;
+            submitButton.disabled = false;
+        }
+    }
+
+    // Asset name input handler with debouncing
+    assetNameInput.addEventListener('input', function() {
+        const searchTerm = this.value.trim();
+        resetFormFields();
+        
+        if (searchTerm.length > 0) {
+            // Clear previous timer
+            if (this.debounceTimer) {
+                clearTimeout(this.debounceTimer);
+            }
+            
+            // Show loading state
+            suggestionsList.innerHTML = '<li class="list-group-item">Loading...</li>';
+            suggestionsList.style.display = 'block';
+            
+            // Add debouncing to prevent too many requests
+            this.debounceTimer = setTimeout(() => {               
+                 fetch(`/asset_management/admindashboard/requestfolder/search_asset.php?q=${encodeURIComponent(searchTerm)}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('Received data:', data);
+                        suggestionsList.innerHTML = '';
+                        
+                        if (Array.isArray(data) && data.length > 0) {
+                            data.forEach(asset => {
+                                const li = document.createElement('li');
+                                const quantity = parseInt(asset.quantity) || 0;
+                                const status = quantity > 0 ? 'text-success' : 'text-danger';
+                                
+                                li.innerHTML = `
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span><strong>${asset.asset_name}</strong></span>
+                                        <span class="${status}">${quantity} available</span>
+                                    </div>
+                                    <small class="text-muted">${asset.category || 'No category'}</small>
+                                `;
+                                
+                                li.className = 'list-group-item list-group-item-action';
+                                li.style.cursor = quantity > 0 ? 'pointer' : 'not-allowed';
+                                
+                                if (quantity > 0) {
+                                    li.addEventListener('click', function() {
+                                        assetNameInput.value = asset.asset_name;
+                                        updateFormFields(asset);
+                                        suggestionsList.style.display = 'none';
+                                    });
+                                }
+                                
+                                suggestionsList.appendChild(li);
+                            });
+                            suggestionsList.style.display = 'block';
+                        } else {
+                            suggestionsList.innerHTML = '<li class="list-group-item text-muted">No assets found</li>';
+                            suggestionsList.style.display = 'block';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        suggestionsList.innerHTML = '<li class="list-group-item text-danger">Error fetching assets. Please try again.</li>';
+                        suggestionsList.style.display = 'block';
+                    });
+            }, 300); // 300ms debounce delay
+        } else {
+            suggestionsList.style.display = 'none';
+        }
+    });
+
+    // Add quantity input validation
+    quantityInput.addEventListener('input', function() {
+        const value = parseInt(this.value) || 0;
+        
+        if (value <= 0) {
+            this.setCustomValidity('Quantity must be greater than 0');
+            submitButton.disabled = true;
+        } else if (value > availableQuantity) {
+            this.setCustomValidity(`Maximum available quantity is ${availableQuantity}`);
+            submitButton.disabled = true;
+        } else {
+            this.setCustomValidity('');
+            submitButton.disabled = false;
+        }
+        this.reportValidity();
+    });
+
+    // Close suggestions when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!assetNameInput.contains(e.target) && !suggestionsList.contains(e.target)) {
+            suggestionsList.style.display = 'none';
+        }
+    });
+
+    // Event listener for department selection
+    document.getElementById('department-select').addEventListener('change', function() {
+        const selectedDepartment = this.value;
+        const employeeSelect = document.getElementById('employee-select');
+        
+        // Show loading state
+        employeeSelect.disabled = true;
+        employeeSelect.innerHTML = '<option>Loading employees...</option>';
+        
+        // Fetch employees for selected department
+        fetch(`/asset_management/admindashboard/requestfolder/get_department_employees.php?department=${encodeURIComponent(selectedDepartment)}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(employees => {
+                // Reset and populate employee dropdown
+                employeeSelect.innerHTML = '<option selected disabled>Select Employee</option>';
+                
+                if (Array.isArray(employees) && employees.length > 0) {
+                    employees.forEach(employee => {
+                        const option = document.createElement('option');
+                        option.value = employee.fullname;
+                        option.textContent = employee.fullname;
+                        employeeSelect.appendChild(option);
+                    });
+                } else {
+                    employeeSelect.innerHTML = '<option disabled selected>No employees found in this department</option>';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                employeeSelect.innerHTML = '<option disabled selected>Error loading employees</option>';
+            })
+            .finally(() => {
+                employeeSelect.disabled = false;
+            });
+    });
+</script>
+

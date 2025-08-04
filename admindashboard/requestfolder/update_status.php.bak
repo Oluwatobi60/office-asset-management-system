@@ -1,0 +1,134 @@
+<?php
+// Include database configuration and utilities
+require_once dirname(__FILE__) . "/../../include/config.php";
+require_once dirname(__FILE__) . "/../../include/utils.php";
+
+header('Content-Type: application/json');
+
+// Function to send JSON response and exit
+function sendJsonResponse($success, $message) {
+    echo json_encode(['success' => $success, 'message' => $message]);
+    exit;
+}
+
+// Initialize response array
+$response = [
+    'success' => false,
+    'message' => ''
+];
+
+try {
+    // Verify database connection
+    if (!$conn) {
+        sendJsonResponse(false, 'Database connection failed');
+    }
+
+    // Validate request method
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        sendJsonResponse(false, 'Invalid request method');
+    }
+
+    // Make sure we have a clean transaction state
+    if ($conn->inTransaction()) {
+        $conn->rollBack();
+    }
+    
+    try {
+        // Check if HOD approval ID is provided        if (isset($_POST['hod_approve_id'])) {
+            $conn->beginTransaction();
+            
+            $hod_approve_id = filter_var($_POST['hod_approve_id'], FILTER_VALIDATE_INT);
+            if ($hod_approve_id === false) {
+                throw new Exception('Invalid HOD approval ID');
+            }
+            
+            // Check if request is already approved
+            $check_sql = "SELECT hod_approved FROM request_table WHERE id = :id";
+            $check_stmt = $conn->prepare($check_sql);
+            $check_stmt->bindParam(':id', $hod_approve_id, PDO::PARAM_INT);
+            $check_stmt->execute();
+            
+            $current_status = $check_stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$current_status) {
+                throw new Exception('Request not found');
+            }
+            
+            if ($current_status['hod_approved'] == 1) {
+                $conn->rollBack();
+                sendJsonResponse(false, 'Request already approved by HOD');
+            }
+
+            // Update request status to approved by HOD and set approval date
+            $update_sql = "UPDATE request_table SET hod_approved = 1, approval_date = CURRENT_TIMESTAMP WHERE id = :id";
+            $stmt = $conn->prepare($update_sql);
+            $stmt->bindParam(':id', $hod_approve_id, PDO::PARAM_INT);
+            
+            if (!$stmt->execute()) {
+                throw new Exception('Failed to update HOD approval status');
+            }
+
+            // Check if any rows were affected
+            if ($stmt->rowCount() === 0) {
+                throw new Exception('No request found with ID: ' . $hod_approve_id);
+            }
+            
+            $response['success'] = true;
+            $response['message'] = 'HOD approval updated successfully';
+            
+            // Log success
+            logError("HOD approval successful for ID: " . $hod_approve_id);
+        }
+        
+        // Check if PRO approval ID is provided
+        if (isset($_POST['pro_approve_id'])) {
+            $pro_approve_id = filter_var($_POST['pro_approve_id'], FILTER_VALIDATE_INT);
+            if ($pro_approve_id === false) {
+                throw new Exception('Invalid PRO approval ID');
+            }            // Log the PRO approval attempt
+            logError("Attempting PRO approval for ID: " . $pro_approve_id);
+
+            // Update request status to approved by PRO
+            $update_sql = "UPDATE request_table SET pro_approved = 1 WHERE id = :id";
+            $stmt = $conn->prepare($update_sql);
+            $stmt->bindParam(':id', $pro_approve_id, PDO::PARAM_INT);
+            
+            if (!$stmt->execute()) {
+                $errorInfo = $stmt->errorInfo();
+                throw new Exception('Failed to update PRO approval status: ' . json_encode($errorInfo));
+            }
+
+            // Check if any rows were affected
+            if ($stmt->rowCount() === 0) {
+                throw new Exception('No request found with ID: ' . $pro_approve_id);
+            }
+            
+            $response['success'] = true;
+            $response['message'] = 'PRO approval updated successfully';
+            
+            // Log success
+            logError("PRO approval successful for ID: " . $pro_approve_id);
+        }
+
+        // If we get here, commit the transaction
+        $conn->commit();
+
+    } catch (Exception $e) {
+        // Roll back the transaction on error
+        $conn->rollBack();
+        throw $e;
+    }
+
+} catch (Exception $e) {
+    // Log the error and prepare error response
+    logError("Error in update_status.php: " . $e->getMessage());
+    $response = [
+        'success' => false,
+        'message' => $e->getMessage()
+    ];
+} finally {
+    // Set response header to JSON and send the response
+    header('Content-Type: application/json');
+    echo json_encode($response);
+}
+?>
