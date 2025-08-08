@@ -5229,3 +5229,110 @@ Stack trace:
 [2025-07-31 18:19:36] Login successful for user 'Teeb'
 [2025-08-01 17:29:34] Login successful for user 'Tobestics'
 [2025-08-04 13:56:07] Login successful for user 'Tobestic'
+[2025-08-07 13:36:15] Login successful for user 'Tobestic'
+[2025-08-07 17:21:58] Login successful for user 'Tobestic'
+[2025-08-07 17:30:38] Login successful for user 'Tobestic'
+[2025-08-07 17:32:49] Login successful for user 'Tobestics'
+[2025-08-07 17:33:30] Login successful for user 'Tobestics'
+[2025-08-07 17:37:20] Login successful for user 'Tobestic'
+[2025-08-07 17:37:39] Login successful for user 'daraminds'
+[2025-08-07 17:40:29] Login successful for user 'Tobestic'
+[2025-08-07 17:40:45] Pagination details
+[2025-08-07 18:10:37] Login successful for user 'Tobestic'
+[2025-08-08 12:24:03] Login successful for user 'Tobestic'
+[2025-08-08 12:26:44] Pagination details
+[2025-08-08 13:08:33] Pagination details
+[2025-08-08 13:08:38] Pagination details
+[2025-08-08 13:08:41] Pagination details
+[2025-08-08 13:08:44] Pagination details
+[2025-08-08 13:10:03] Pagination details
+[2025-08-08 13:11:07] Pagination details
+[2025-08-08 13:12:23] Pagination details
+[2025-08-08 13:13:27] Pagination details
+[2025-08-08 13:17:43] Pagination details
+[2025-08-08 13:17:47] Pagination details
+[2025-08-08 13:17:49] Pagination details
+[2025-08-08 13:18:49] Pagination details
+[2025-08-08 13:18:59] Pagination details
+[2025-08-08 13:19:04] Pagination details
+[2025-08-08 13:19:34] Pagination details
+[2025-08-08 13:20:28] Pagination details
+[2025-08-08 13:20:35] Pagination details
+[2025-08-08 13:20:38] Pagination details
+[2025-08-08 13:21:08] Pagination details
+[2025-08-08 13:21:18] Pagination details
+[2025-08-08 13:21:37] Pagination details
+[2025-08-08 13:22:09] Login successful for user 'HOD'
+[2025-08-08 13:22:35] Login successful for user 'Tobestic'
+[2025-08-08 13:23:04] Login successful for user 'HOD'
+[2025-08-08 13:26:02] Login successful for user 'PRO'
+[2025-08-08 13:28:09] Pagination details
+[2025-08-08 13:28:15] Pagination details
+[2025-08-08 13:29:08] Pagination details
+[2025-08-08 13:29:21] Login successful for user 'user1'
+[2025-08-08 13:40:22] Login successful for user 'Tobestic'
+[2025-08-08 13:40:54] Login successful for user 'user1'
+[2025-08-08 14:17:42] Login successful for user 'PRO'
+[2025-08-08 14:18:19] Login successful for user 'user1'
+[2025-08-08 14:18:37] Login failed: Password mismatch for user 'HOD'.
+[2025-08-08 14:19:10] Login successful for user 'HOD'
+[2025-08-08 14:19:27] Login successful for user 'Tobestic'
+[2025-08-08 14:32:47] Login successful for user 'user1'
+[2025-08-08 14:34:24] Login successful for user 'PRO'
+[2025-08-08 14:41:27] Login successful for user 'HOD'
+[2025-08-08 14:41:41] Login successful for user 'PRO'
+[2025-08-08 14:42:41] Login successful for user 'user1'
+[2025-08-08 14:43:28] Login successful for user 'PRO'
+[2025-08-08 14:43:53] Login successful for user 'HOD'
+[2025-08-08 14:44:15] Login successful for user 'user1'
+[2025-08-08 14:44:52] Login successful for user 'PRO'
+[2025-08-08 14:48:23] Login successful for user 'HOD'
+[2025-08-08 14:48:41] Login successful for user 'PRO'
+[2025-08-08 14:50:09] Pagination details
+[2025-08-08 14:52:12] Pagination details
+[2025-08-08 14:52:34] Pagination details
+[2025-08-08 14:53:10] Login successful for user 'HOD'
+[2025-08-08 14:56:07] Login successful for user 'PRO'
+[2025-08-08 14:56:41] Login successful for user 'HOD1'
+[08-Aug-2025 14:56:54 Europe/Berlin] Search asset script starting...
+[08-Aug-2025 14:56:54 Europe/Berlin] Config file loaded successfully
+[08-Aug-2025 14:56:54 Europe/Berlin] Preparing SQL query: SELECT 
+            asset_name,
+            reg_no,
+            category,
+            CAST(quantity AS SIGNED) as quantity,
+            department
+        FROM request_table
+        WHERE (
+            LOWER(asset_name) LIKE LOWER(:search)
+            OR LOWER(reg_no) LIKE LOWER(:search)
+            OR LOWER(category) LIKE LOWER(:search)
+        )
+        AND asset_name IS NOT NULL
+        AND quantity > 0
+        ORDER BY 
+            CASE 
+                WHEN LOWER(asset_name) = LOWER(:exact) THEN 1
+                WHEN LOWER(asset_name) LIKE LOWER(:startsWith) THEN 2
+                ELSE 3 
+            END,
+            asset_name 
+        LIMIT 10
+[08-Aug-2025 14:56:54 Europe/Berlin] Executing query with search term: up
+[08-Aug-2025 14:56:54 Europe/Berlin] Found 2 results
+[08-Aug-2025 14:56:54 Europe/Berlin] Search results for query 'up': [{"asset_name":"UPS","reg_no":"J93920","category":"Accessories","quantity":1,"department":"Computer Science"},{"asset_name":"UPS","reg_no":"J93920","category":"Accessories","quantity":4,"department":"Computer Science"}]
+[08-Aug-2025 14:57:08 Europe/Berlin] Fetching employees for department: Computer Science
+[08-Aug-2025 14:57:08 Europe/Berlin] Raw query results: [{"firstname":"CSHOD","lastname":"CSHOD","department":"Computer Science","username":"HOD"}]
+[08-Aug-2025 14:57:08 Europe/Berlin] Found employee: {"name":"CSHOD CSHOD","department":"Computer Science","username":"HOD"}
+[08-Aug-2025 14:57:08 Europe/Berlin] Found 1 employees for department: Computer Science
+[08-Aug-2025 14:57:08 Europe/Berlin] Employee data: [{"name":"CSHOD CSHOD","department":"Computer Science","username":"HOD"}]
+[2025-08-08 14:57:46] Login successful for user 'HOD'
+[08-Aug-2025 14:57:53 Europe/Berlin] PHP Warning:  Undefined array key "status" in C:\xampp\htdocs\asset_management\hodfolder\deptborrow\deptborrowassettable.php on line 104
+[08-Aug-2025 14:57:56 Europe/Berlin] PHP Warning:  Undefined array key "status" in C:\xampp\htdocs\asset_management\hodfolder\deptborrow\deptborrowassettable.php on line 104
+[2025-08-08 14:58:12] Login successful for user 'HOD1'
+[2025-08-08 14:59:44] Login successful for user 'user2'
+[2025-08-08 15:00:03] Login successful for user 'HOD1'
+[2025-08-08 15:00:19] Login successful for user 'HOD'
+[08-Aug-2025 15:00:22 Europe/Berlin] PHP Warning:  Undefined array key "status" in C:\xampp\htdocs\asset_management\hodfolder\deptborrow\deptborrowassettable.php on line 104
+[08-Aug-2025 15:00:26 Europe/Berlin] PHP Warning:  Undefined array key "status" in C:\xampp\htdocs\asset_management\hodfolder\deptborrow\deptborrowassettable.php on line 104
+[08-Aug-2025 15:00:47 Europe/Berlin] PHP Warning:  Undefined array key "status" in C:\xampp\htdocs\asset_management\hodfolder\deptborrow\deptborrowassettable.php on line 104

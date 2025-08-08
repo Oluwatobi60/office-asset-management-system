@@ -61,8 +61,8 @@ try {
                 <?php
                 // Initialize counter for row numbering
                 $s = $offset + 1;
-                  // Display table rows if there are records
-                if ($rows = $stmt->fetchAll(PDO::FETCH_ASSOC)) {
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                if ($rows && count($rows) > 0) {
                     foreach ($rows as $row) {
                         // Generate table rows with request details
                         // Each row shows ID, registration number, asset details, and approval status
@@ -97,6 +97,9 @@ try {
                               </td>";
                         echo "</tr>";
                     }
+                } else {
+                    // Show message if no records
+                    echo "<tr><td colspan='8' class='text-center'>No request record</td></tr>";
                 }
                 ?>
             </table>

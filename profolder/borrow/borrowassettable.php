@@ -93,10 +93,14 @@ $returnedStmt->execute();
                         // Procurement Status
                         echo "<td>";
                         if ($row['pro_status'] == 0) {
-                            echo "<div class='btn-group'>";
-                            echo "<button onclick='updateStatus(\"pro\", " . $row['id'] . ", 1, this)' class='btn btn-warning'>Pending</button>";
-                            echo "<button onclick='updateStatus(\"pro\", " . $row['id'] . ", 2, this)' class='btn btn-danger'>Reject</button>";
-                            echo "</div>";
+                            if ($row['hod_status'] == 1) {
+                                echo "<div class='btn-group'>";
+                                echo "<button onclick='updateStatus(\"pro\", " . $row['id'] . ", 1, this)' class='btn btn-warning'>Pending</button>";
+                                echo "<button onclick='updateStatus(\"pro\", " . $row['id'] . ", 2, this)' class='btn btn-danger'>Reject</button>";
+                                echo "</div>";
+                            } else {
+                                echo "<button class='btn btn-secondary' disabled>Waiting for HOD Approval</button>";
+                            }
                         } else if ($row['pro_status'] == 1) {
                             echo "<button class='btn btn-success' disabled>Approved</button>";
                         } else if ($row['pro_status'] == 2) {
@@ -123,12 +127,15 @@ $returnedStmt->execute();
 
                         // Action buttons
                         echo "<td>";
-                        echo "<a href='requestfolder/deleterequest.php?id=" . $row['id'] . "'><i class='fa fa-trash' style='color:red'></i></a> ";
+                       /*  echo "<a href='requestfolder/deleterequest.php?id=" . $row['id'] . "'><i class='fa fa-trash' style='color:red'></i></a> "; */
                         echo "<a href='borrow/viewborrow.php?id=" . $row['id'] . "'><i class='fa fa-eye'></i></a>";
                         echo "</td>";
 
                         echo "</tr>";
                     }
+                } else {
+                    // Show message if no records
+                    echo "<tr><td colspan='8' class='text-center'>No borrow record</td></tr>";
                 }
                 ?>
             </table>

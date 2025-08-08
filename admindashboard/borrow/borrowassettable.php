@@ -147,6 +147,9 @@ $returnedStmt->execute();
 
                         echo "</tr>";
                     }
+                } else {
+                    // Show message if no records
+                    echo "<tr><td colspan='9' class='text-center'>No borrow record</td></tr>";
                 }
                 ?>
             </table>

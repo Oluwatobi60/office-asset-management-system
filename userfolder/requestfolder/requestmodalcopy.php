@@ -75,7 +75,7 @@ require "../admindashboard/include/config.php";
 
                         // Action column with view button
                         echo "<td>
-                        <a href='requestfolder/viewrequest.php?id=".$row['id']."'><i class='fa fa-eye'></i></a>
+                        <a href='requestfolder/viewrequest.php?id=".$row['staff_id']."'><i class='fa fa-eye'></i></a>
                         </td>";
                         echo "</tr>";
                     }

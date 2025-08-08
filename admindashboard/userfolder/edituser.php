@@ -1,27 +1,42 @@
 <?php
- require "../include/config.php";
- 
-$id = $_GET['id']; // Retrieve the id from the URL parameters
+require "../include/config.php";
+
+// Use PDO for all database operations
+$id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 if (isset($_POST['submit'])) {
-    $firstname = $conn->real_escape_string($_POST['firstname']);
-    $lastname = $conn->real_escape_string($_POST['lastname']);
-    $phone = $conn->real_escape_string($_POST['phone']);
-    $role = isset($_POST['role']) ? $conn->real_escape_string($_POST['role']) : '';
-    $password = $conn->real_escape_string($_POST['password']);
+    $firstname = $_POST['firstname'];
+    $lastname = $_POST['lastname'];
+    $phone = $_POST['phone'];
+    $role = isset($_POST['role']) ? $_POST['role'] : '';
+    $password = $_POST['password'];
 
-    // Update the password without hashing
     if (!empty($password)) {
-        $update_sql = "UPDATE user_table SET firstname='$firstname', lastname='$lastname', phone='$phone', role='$role', password='$password' WHERE id='$id'";
+        $update_sql = "UPDATE user_table SET firstname = :firstname, lastname = :lastname, phone = :phone, role = :role, password = :password WHERE id = :id";
+        $params = [
+            ':firstname' => $firstname,
+            ':lastname' => $lastname,
+            ':phone' => $phone,
+            ':role' => $role,
+            ':password' => $password,
+            ':id' => $id
+        ];
     } else {
-        $update_sql = "UPDATE user_table SET firstname='$firstname', lastname='$lastname', phone='$phone', role='$role' WHERE id='$id'";
+        $update_sql = "UPDATE user_table SET firstname = :firstname, lastname = :lastname, phone = :phone, role = :role WHERE id = :id";
+        $params = [
+            ':firstname' => $firstname,
+            ':lastname' => $lastname,
+            ':phone' => $phone,
+            ':role' => $role,
+            ':id' => $id
+        ];
     }
 
-    if ($conn->query($update_sql) === TRUE) {
+    $stmt = $conn->prepare($update_sql);
+    if ($stmt->execute($params)) {
         echo "<script>alert('Record updated successfully'); window.location.href='../newuser.php';</script>";
     } else {
-        echo "Error updating record: " . $conn->error;
-        echo "<script>alert('Error updating record: ' . $conn->error')</script>";
+        echo "<script>alert('Error updating record');</script>";
     }
 }
 ?>
@@ -241,10 +256,11 @@ if (isset($_POST['submit'])) {
                 <!-- ============================================================== -->
                  <?php
                     require "../include/config.php";
-                    $id = $_GET['id'];
-                    $sql = "SELECT * FROM user_table WHERE id = '$id'";
-                    $result = $conn->query($sql);
-                    $row = $result->fetch_assoc();
+                    $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+                    $sql = "SELECT * FROM user_table WHERE id = :id";
+                    $stmt = $conn->prepare($sql);
+                    $stmt->execute([':id' => $id]);
+                    $row = $stmt->fetch(PDO::FETCH_ASSOC);
                 ?>
 
                 <!-- START OF UPDATING -->
@@ -291,11 +307,13 @@ if (isset($_POST['submit'])) {
                                 <select id="role" class="form-control" name="role">
                                     <option selected disabled><?php echo $row['role']; ?></option>
                                         <?php
-                                        $sql_roles = "SELECT * FROM role"; // Renamed variable to avoid conflict
-                                        $result_roles = $conn->query($sql_roles);
-                                        if ($result_roles->num_rows > 0) {
-                                            while ($role_row = $result_roles->fetch_assoc()) { // Use a different variable for the loop
-                                                echo "<option value='" . $role_row['user_role'] . "'>" . $role_row['user_role'] . "</option>";
+                                        $sql_roles = "SELECT * FROM role";
+                                        $stmt_roles = $conn->prepare($sql_roles);
+                                        $stmt_roles->execute();
+                                        $result_roles = $stmt_roles->fetchAll(PDO::FETCH_ASSOC);
+                                        if ($result_roles) {
+                                            foreach ($result_roles as $role_row) {
+                                                echo "<option value='" . htmlspecialchars($role_row['user_role']) . "'>" . htmlspecialchars($role_row['user_role']) . "</option>";
                                             }
                                         }
                                         ?>

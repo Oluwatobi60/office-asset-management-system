@@ -60,7 +60,9 @@ try {
             <?php
                 try {
                     $s = $offset + 1; // Initialize serial number based on offset
+                    $hasRows = false;
                     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                        $hasRows = true;
                         echo "<tr>";
                         echo "<th scope='row'>" . htmlspecialchars($s++) . "</th>";
                         echo "<td>" . htmlspecialchars($row['reg_no']) . "</td>";
@@ -68,11 +70,16 @@ try {
                         echo "<td>" . htmlspecialchars($row['assigned_employee']) . "</td>";
                         echo "<td>" . htmlspecialchars($row['request_date']) . "</td>";
                         echo "<td>";
+                        // Only allow procurement approval if HOD has approved
                         if ($row['pro_approved'] == 0) {
-                            echo "<form method='POST' style='display:inline;'>";
-                            echo "<input type='hidden' name='approve_id' value='" . htmlspecialchars($row['id']) . "'>";
-                            echo "<button type='submit' class='btn btn-warning'>Pending...</button>";
-                            echo "</form>";
+                            if ($row['hod_approved'] == 1) {
+                                echo "<form method='POST' style='display:inline;'>";
+                                echo "<input type='hidden' name='approve_id' value='" . htmlspecialchars($row['id']) . "'>";
+                                echo "<button type='submit' class='btn btn-warning'>Pending...</button>";
+                                echo "</form>";
+                            } else {
+                                echo "<button class='btn btn-secondary' disabled>Waiting for HOD Approval</button>";
+                            }
                         } else {
                             echo "<button class='btn btn-success' disabled>Approved</button>";
                         }
@@ -81,6 +88,9 @@ try {
                         echo "<a href='requestfolder/viewrequest.php?id=" . htmlspecialchars($row['id']) . "'><i class='fa fa-eye'></i></a>";
                         echo "</td>";
                         echo "</tr>";
+                    }
+                    if (!$hasRows) {
+                        echo "<tr><td colspan='7' class='text-center'>No request record</td></tr>";
                     }
                 } catch (PDOException $e) {
                     error_log("Error fetching request details: " . $e->getMessage());
@@ -114,3 +124,4 @@ try {
     error_log("Error in pagination: " . $e->getMessage());
     echo "<div class='alert alert-danger'>Error loading table. Please try again later.</div>";
 }
+?>

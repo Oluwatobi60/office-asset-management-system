@@ -6,12 +6,12 @@ session_start();
 ob_start();
 
 // Include database configuration file
-include '../admindashboard/include/config.php';
+include 'include/config.php';
 
 // Define a function to log errors with timestamps
 function logError($message) {
     // Set the path to the error log file
-    $logFile = '../error_log.txt';
+    $logFile = 'error_log.txt';
     // Get current timestamp for the log entry
     $timestamp = date("Y-m-d H:i:s");
     // Append the error message with timestamp to the log file
@@ -89,16 +89,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // Redirect user based on their role
                         switch ($role) {
                             case 'hod':
-                                header("Location: ../hodfolder/hoddashboard.php");
+                                header("Location: hodfolder/hoddashboard.php");
                                 break;
                             case 'user':
-                                header("Location: dashboard.php");
+                                header("Location: userfolder/dashboard.php");
                                 break;
                             case 'procurement':
-                                header("Location: ../profolder/prodashboard.php");
+                                header("Location: profolder/prodashboard.php");
                                 break;
                             case 'admin':
-                                header("Location: ../admindashboard/index.php");
+                                header("Location: admindashboard/index.php");
                                 break;
                         }
                         // Stop execution after redirect
@@ -138,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <!-- Configure viewport for responsive design -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Set favicon for the website -->
-    <link rel="icon" type="image/png" sizes="16x16" href="../admindashboard/assets/images/logo.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="admindashboard/assets/images/logo.png">
     <!-- Set page title -->
     <title>Login | Asset Management</title>
     <!-- Include Bootstrap CSS framework -->
@@ -152,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="row w-100 align-items-center">
             <!-- Left column for logo -->
             <div class="col-md-5 text-center mb-4 mb-md-0">
-                <img src="../admindashboard/assets/images/logo.png" alt="Office" class="img-fluid rounded shadow-lg" style="max-height: 300px;">
+                <img src="admindashboard/assets/images/logo.png" alt="Office" class="img-fluid rounded shadow-lg" style="max-height: 300px;">
             </div>
             <!-- Right column for login form -->
             <div class="col-md-5">

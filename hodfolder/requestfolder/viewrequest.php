@@ -204,9 +204,11 @@
                  <?php
                     require "../../admindashboard/include/config.php";
                     $id = $_GET['id'];
-                    $sql = "SELECT * FROM request_table WHERE id = '$id'";
-                    $result = $conn->query($sql);
-                    $row = $result->fetch_assoc();
+                    $sql = "SELECT * FROM request_table WHERE id = :id";
+                    $stmt = $conn->prepare($sql);
+                    $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+                    $stmt->execute();
+                    $row = $stmt->fetch(PDO::FETCH_ASSOC);
                 ?>
 
                 <!-- START OF UPDATING -->

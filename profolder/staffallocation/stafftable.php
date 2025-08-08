@@ -191,9 +191,9 @@ try {
                                 <a href="staffallocation/viewallocation.php?id=<?php echo $id; ?>" class="btn btn-info btn-sm">
                                     <i class="fa fa-eye"></i>
                                 </a>
-                                <a href="staffallocation/deleteallocation.php?id=<?php echo $id; ?>" class="btn btn-danger btn-sm">
+                               <!--  <a href="staffallocation/deleteallocation.php?id=<?php echo $id; ?>" class="btn btn-danger btn-sm">
                                     <i class="fa fa-trash"></i>
-                                </a>
+                                </a> -->
                                 <?php if ($row['is_under_repair']): ?>
                                     <button class="btn btn-secondary btn-sm" disabled>
                                         <i class="fa fa-wrench"></i> Under Repair
